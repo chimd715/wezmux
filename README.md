@@ -113,6 +113,41 @@ Download `Wezmux-windows-x64.zip` from a release or CI artifact, extract it, and
 run `wezterm-gui.exe`. The preview zip does not install shell integrations,
 PATH entries, or agent hook wrappers.
 
+### Ubuntu / Linux (experimental)
+
+`make install` detects the host OS. On Linux it installs to `~/.local`, without
+sudo, instead of creating a macOS app bundle. Ubuntu build dependencies can be
+installed with the existing distro-aware helper:
+
+```bash
+./get-deps
+sudo apt-get install jq lsof
+make install
+~/.local/bin/wezmux
+```
+
+Rust and recursive Git submodules are required. `get-deps` may request sudo;
+`make install` does not install system dependencies automatically.
+
+Use `make install PREFIX=/your/path` for a custom Linux destination, and use
+the same `PREFIX` with `make install-codex-hooks`. `make bundle` creates a
+Linux directory bundle under `target/wezmux-linux`.
+
+The installation includes a desktop launcher and keeps agent wrappers private
+under `PREFIX/lib/wezmux/bin`; it does not replace your normal Claude or Oh My
+Pi commands. Add `~/.local/bin` to PATH if needed. Existing Lua configs are not
+rewritten; fresh Linux configs use JetBrains Mono and Ctrl-based shortcuts.
+
+Linux right-click workspace actions use an in-window searchable menu (click an
+action, or filter and press Enter; Esc cancels). Each local pane supplies its
+own `WEZMUX_TTY`, including split panes and detached agent hooks.
+
+Linux support is experimental. The macOS global show/hide hotkey is not ported:
+use your desktop environment's custom keyboard shortcuts to launch
+`~/.local/bin/wezmux`. This launches the application; it is not a hide/show
+toggle. X11 and Wayland must be validated separately. Ubuntu CI builds the GUI,
+runs module tests, and checks the installer; it does not exercise a live desktop.
+
 ### Development build
 
 Build to `target/Wezmux.app` without touching `/Applications`:

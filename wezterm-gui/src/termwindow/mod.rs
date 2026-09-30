@@ -86,6 +86,7 @@ pub mod spawn;
 pub mod webgpu;
 pub mod workspace_config;
 pub mod workspace_emoji_picker;
+mod workspace_menu;
 use crate::spawn::SpawnWhere;
 use prevcursor::PrevCursorPos;
 
@@ -180,6 +181,7 @@ pub enum UIItemType {
     WorkspaceEmojiCancel,
     /// Scroll wheel target spanning the picker body.
     WorkspaceEmojiBackground,
+    WorkspaceMenuEntry(usize),
     AboveScrollThumb,
     ScrollThumb,
     BelowScrollThumb,

@@ -56,6 +56,7 @@ impl super::TermWindow {
             | UIItemType::WorkspaceEmojiCell(_)
             | UIItemType::WorkspaceEmojiReset
             | UIItemType::WorkspaceEmojiCancel
+            | UIItemType::WorkspaceMenuEntry(_)
             | UIItemType::WorkspaceEmojiBackground => {}
             UIItemType::CloseTab(_)
             | UIItemType::AboveScrollThumb
@@ -84,6 +85,7 @@ impl super::TermWindow {
             | UIItemType::WorkspaceEmojiCell(_)
             | UIItemType::WorkspaceEmojiReset
             | UIItemType::WorkspaceEmojiCancel
+            | UIItemType::WorkspaceMenuEntry(_)
             | UIItemType::WorkspaceEmojiBackground => {
                 self.sidebar.hovered_workspace = None;
             }
@@ -503,6 +505,15 @@ impl super::TermWindow {
             UIItemType::SidebarBackground => {
                 // No click action for background; scroll is handled above
             }
+            UIItemType::WorkspaceMenuEntry(tag) => {
+                context.set_cursor(Some(MouseCursor::Hand));
+                if matches!(event.kind, WMEK::Press(MousePress::Left)) {
+                    self.cancel_modal();
+                    if let Some(window) = self.window.clone() {
+                        self.handle_context_menu_selection(tag, &window);
+                    }
+                }
+            }
             UIItemType::WorkspaceEmojiCell(glyph) => {
                 if matches!(event.kind, WMEK::Press(MousePress::Left)) {
                     self.apply_workspace_emoji_from_picker(Some(glyph));
@@ -736,6 +747,13 @@ impl super::TermWindow {
         // Store which workspace this menu is for, so the notification handler can use it
         self.sidebar.context_menu_workspace = Some(workspace);
 
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            let menu = super::palette::CommandPalette::new_workspace_menu(&menu_items);
+            self.set_modal(Rc::new(menu));
+            let _ = (event, context);
+        }
+        #[cfg(any(windows, target_os = "macos"))]
         context.show_context_menu(
             menu_items,
             ::window::ScreenPoint::new(event.coords.x, event.coords.y),

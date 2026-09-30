@@ -39,6 +39,7 @@ pub struct CommandPalette {
     top_row: RefCell<usize>,
     max_rows_on_screen: RefCell<usize>,
     commands: Vec<ExpandedCommand>,
+    workspace_menu_tags: Option<Vec<usize>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -238,6 +239,34 @@ impl CommandPalette {
             element: RefCell::new(None),
             selection: RefCell::new(String::new()),
             commands,
+            workspace_menu_tags: None,
+            matches: RefCell::new(None),
+            selected_row: RefCell::new(0),
+            top_row: RefCell::new(0),
+            max_rows_on_screen: RefCell::new(0),
+        }
+    }
+
+    /// Reuse the GPU palette for platforms without a native context menu.
+    pub fn new_workspace_menu(items: &[window::ContextMenuItem]) -> Self {
+        let entries = super::workspace_menu::flatten_menu(items);
+        let tags = entries.iter().map(|(_, tag)| *tag).collect();
+        let commands = entries
+            .into_iter()
+            .map(|(label, _)| ExpandedCommand {
+                brief: label.into(),
+                doc: "".into(),
+                action: KeyAssignment::Nop,
+                keys: Vec::new(),
+                menubar: &[],
+                icon: None,
+            })
+            .collect();
+        Self {
+            element: RefCell::new(None),
+            selection: RefCell::new(String::new()),
+            commands,
+            workspace_menu_tags: Some(tags),
             matches: RefCell::new(None),
             selected_row: RefCell::new(0),
             top_row: RefCell::new(0),
@@ -249,6 +278,7 @@ impl CommandPalette {
         term_window: &mut TermWindow,
         selection: &str,
         commands: &[ExpandedCommand],
+        workspace_menu_tags: Option<&[usize]>,
         matches: &MatchResults,
         max_rows_on_screen: usize,
         selected_row: usize,
@@ -422,22 +452,25 @@ impl CommandPalette {
                 );
             }
 
-            elements.push(
-                Element::new(&font, ElementContent::Children(row))
-                    .colors(ElementColors {
-                        border: BorderColor::default(),
-                        bg,
-                        text,
-                    })
-                    .padding(BoxDimension {
-                        left: Dimension::Cells(0.25),
-                        right: Dimension::Cells(0.25),
-                        top: Dimension::Cells(0.),
-                        bottom: Dimension::Cells(0.),
-                    })
-                    .min_width(Some(Dimension::Percent(1.)))
-                    .display(DisplayType::Block),
-            );
+            let mut element = Element::new(&font, ElementContent::Children(row))
+                .colors(ElementColors {
+                    border: BorderColor::default(),
+                    bg,
+                    text,
+                })
+                .padding(BoxDimension {
+                    left: Dimension::Cells(0.25),
+                    right: Dimension::Cells(0.25),
+                    top: Dimension::Cells(0.),
+                    bottom: Dimension::Cells(0.),
+                })
+                .min_width(Some(Dimension::Percent(1.)))
+                .display(DisplayType::Block);
+            if let Some(tags) = workspace_menu_tags {
+                let tag = tags[matches.matches[display_idx]];
+                element = element.item_type(super::UIItemType::WorkspaceMenuEntry(tag));
+            }
+            elements.push(element);
         }
 
         let dimensions = term_window.dimensions;
@@ -593,6 +626,9 @@ impl Modal for CommandPalette {
     ) -> anyhow::Result<bool> {
         match (key, mods) {
             (KeyCode::Escape, KeyModifiers::NONE) | (KeyCode::Char('g'), KeyModifiers::CTRL) => {
+                if self.workspace_menu_tags.is_some() {
+                    term_window.sidebar.context_menu_workspace.take();
+                }
                 term_window.cancel_modal();
             }
             (KeyCode::UpArrow, KeyModifiers::NONE) | (KeyCode::Char('p'), KeyModifiers::CTRL) => {
@@ -630,6 +666,14 @@ impl Modal for CommandPalette {
                     },
                 };
                 let item = &self.commands[alias_idx];
+                if let Some(tags) = &self.workspace_menu_tags {
+                    let tag = tags[alias_idx];
+                    term_window.cancel_modal();
+                    if let Some(window) = term_window.window.clone() {
+                        term_window.handle_context_menu_selection(tag, &window);
+                    }
+                    return Ok(true);
+                }
                 if let Err(err) = save_recent(item) {
                     log::error!("Error while saving recents: {err:#}");
                 }
@@ -688,6 +732,7 @@ impl Modal for CommandPalette {
                 term_window,
                 selection,
                 &self.commands,
+                self.workspace_menu_tags.as_deref(),
                 matches,
                 max_rows_on_screen,
                 *self.selected_row.borrow(),

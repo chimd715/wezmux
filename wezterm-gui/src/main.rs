@@ -57,6 +57,7 @@ mod unicode_names;
 mod uniforms;
 mod update;
 mod utilsprites;
+mod wezmux_paths;
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -1203,27 +1204,21 @@ fn run() -> anyhow::Result<()> {
     // Prepend our bin/ directory to PATH so the claude wrapper shadows
     // the real binary for all shells spawned inside wezmux.
     if let Ok(exe) = std::env::current_exe() {
-        // Walk up from the executable to find a sibling bin/ directory.
-        // Works for both target/debug/wezterm-gui and app bundles.
-        let mut dir = exe.as_path().parent();
-        while let Some(d) = dir {
-            let bin_dir = d.join("bin");
-            if bin_dir.join("claude").exists() {
-                // Store the bin dir so shell init scripts can re-prepend it
-                // after macOS path_helper reorders PATH.
-                std::env::set_var("WEZMUX_BIN", &bin_dir);
+        // Require bundled hooks too, so /usr/bin/claude isn't mistaken for
+        // an integration directory. Works for development and installed builds.
+        if let Some(bin_dir) = wezmux_paths::integration_bin(&exe) {
+            // Store the bin dir so shell init scripts can re-prepend it
+            // after macOS path_helper reorders PATH.
+            std::env::set_var("WEZMUX_BIN", &bin_dir);
 
-                let path = std::env::var_os("PATH").unwrap_or_default();
-                let mut paths = std::env::split_paths(&path).collect::<Vec<_>>();
-                if !paths.contains(&bin_dir) {
-                    paths.insert(0, bin_dir);
-                    if let Ok(new_path) = std::env::join_paths(&paths) {
-                        std::env::set_var("PATH", &new_path);
-                    }
+            let path = std::env::var_os("PATH").unwrap_or_default();
+            let mut paths = std::env::split_paths(&path).collect::<Vec<_>>();
+            if !paths.contains(&bin_dir) {
+                paths.insert(0, bin_dir);
+                if let Ok(new_path) = std::env::join_paths(&paths) {
+                    std::env::set_var("PATH", &new_path);
                 }
-                break;
             }
-            dir = d.parent();
         }
     }
 
@@ -1261,7 +1256,12 @@ fn run() -> anyhow::Result<()> {
     // Seed ~/.wezmux.lua on first launch so fresh installs get sane defaults
     {
         let wezmux_lua = config::HOME_DIR.join(".wezmux.lua");
-        if !wezmux_lua.exists() {
+        if !opts.skip_config
+            && opts.config_file.is_none()
+            && std::env::var_os("WEZTERM_CONFIG_FILE").is_none()
+            && std::env::var_os("WEZMUX_CONFIG_FILE").is_none()
+            && wezmux_paths::should_seed_config(&config::HOME_DIR, &config::CONFIG_DIRS)
+        {
             static DEFAULT_WEZMUX_LUA: &str = include_str!("../../config/src/default_wezmux.lua");
             if let Err(err) = std::fs::write(&wezmux_lua, DEFAULT_WEZMUX_LUA) {
                 log::warn!("Failed to seed {}: {err:#}", wezmux_lua.display());

@@ -616,7 +616,7 @@ impl Domain for LocalDomain {
         command_dir: Option<String>,
     ) -> anyhow::Result<Arc<dyn Pane>> {
         let pane_id = alloc_pane_id();
-        let cmd = self
+        let mut cmd = self
             .build_command(command, command_dir, pane_id)
             .await
             .context("build_command")?;
@@ -624,6 +624,13 @@ impl Domain for LocalDomain {
             .pty_system
             .lock()
             .openpty(crate::terminal_size_to_pty_size(size)?)?;
+
+        // Always override an inherited tty: a split pane must report to its
+        // own PTY, not the parent pane. Works with bash, zsh and detached hooks.
+        #[cfg(unix)]
+        if let Some(tty) = pair.master.tty_name() {
+            cmd.env("WEZMUX_TTY", tty);
+        }
 
         let command_line = cmd
             .as_unix_command_line()

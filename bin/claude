@@ -107,8 +107,12 @@ SETTINGS_JSON=$(cat <<'ENDJSON'
 ENDJSON
 )
 
-# Replace placeholder with actual hook dir path
-SETTINGS_JSON="${SETTINGS_JSON//HOOK_DIR_PLACEHOLDER/$HOOK_DIR}"
+# Quote for the hook shell first, then escape for the containing JSON string.
+# In particular, custom Linux PREFIX paths and macOS user paths may have spaces.
+quoted_hook_dir="'${HOOK_DIR//\'/\'\\\'\'}'"
+quoted_hook_dir="${quoted_hook_dir//\\/\\\\}"
+quoted_hook_dir="${quoted_hook_dir//\"/\\\"}"
+SETTINGS_JSON="${SETTINGS_JSON//HOOK_DIR_PLACEHOLDER/$quoted_hook_dir}"
 
 # Check if user already passed --settings
 has_settings=false

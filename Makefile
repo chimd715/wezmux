@@ -1,4 +1,6 @@
 APP_DIR ?= /Applications/Wezmux.app
+HOST_OS := $(shell uname -s)
+PREFIX ?= $(HOME)/.local
 
 .PHONY: all fmt build check test install install-codex-hooks bundle
 
@@ -30,6 +32,18 @@ build:
 fmt:
 	cargo +nightly fmt
 
+ifeq ($(HOST_OS),Linux)
+install:
+	cargo build --release -p wezterm -p wezterm-gui -p wezterm-mux-server -p strip-ansi-escapes
+	bash bin/install-linux.sh "$(PREFIX)" target/release
+
+install-codex-hooks:
+	bash "$(PREFIX)/lib/wezmux/bin/install-codex-hooks.sh"
+
+bundle:
+	cargo build --release -p wezterm -p wezterm-gui -p wezterm-mux-server -p strip-ansi-escapes
+	bash bin/install-linux.sh "$(CURDIR)/target/wezmux-linux" target/release
+else ifeq ($(HOST_OS),Darwin)
 install:
 	cargo build --release -p wezterm -p wezterm-gui -p wezterm-mux-server -p strip-ansi-escapes
 	rm -rf $(APP_DIR)
@@ -71,3 +85,8 @@ bundle:
 	chmod +x target/Wezmux.app/Contents/Resources/bin/claude target/Wezmux.app/Contents/Resources/bin/omp target/Wezmux.app/Contents/Resources/bin/hooks/*.sh target/Wezmux.app/Contents/Resources/bin/hooks/codex/*.sh target/Wezmux.app/Contents/Resources/bin/install-codex-hooks.sh
 	codesign --force --sign - target/Wezmux.app/Contents/MacOS/wezterm-gui
 	@echo "Wezmux.app bundle ready at target/Wezmux.app"
+else
+install install-codex-hooks bundle:
+	@echo "Unsupported installation OS: $(HOST_OS). Use the Windows preview on Windows." >&2
+	@exit 1
+endif

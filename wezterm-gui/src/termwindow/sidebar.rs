@@ -1574,8 +1574,8 @@ fn load_listening_ports(process_ids: &[u32]) -> Vec<u16> {
         .map(u32::to_string)
         .collect::<Vec<_>>()
         .join(",");
-    let output = Command::new("lsof")
-        .args([
+    let output = crate::timed_command::output_with_timeout(
+        Command::new("lsof").args([
             "-nP",
             "-iTCP",
             "-sTCP:LISTEN",
@@ -1584,8 +1584,9 @@ fn load_listening_ports(process_ids: &[u32]) -> Vec<u16> {
             &pid_list,
             "-F",
             "n",
-        ])
-        .output();
+        ]),
+        Duration::from_secs(3),
+    );
 
     match output {
         Ok(output) if output.status.success() => {
@@ -1632,11 +1633,13 @@ enum GitHubPullRequestState {
 }
 
 fn load_pull_request(repo_root: &Path) -> Option<WorkspacePullRequest> {
-    let output = Command::new("gh")
-        .args(["pr", "view", "--json", "number,state,mergedAt"])
-        .current_dir(repo_root)
-        .output()
-        .ok()?;
+    let output = crate::timed_command::output_with_timeout(
+        Command::new("gh")
+            .args(["pr", "view", "--json", "number,state,mergedAt"])
+            .current_dir(repo_root),
+        Duration::from_secs(5),
+    )
+    .ok()?;
 
     if !output.status.success() {
         return None;

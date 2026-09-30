@@ -53,6 +53,7 @@ mod spawn;
 mod stats;
 mod tabbar;
 mod termwindow;
+mod timed_command;
 mod unicode_names;
 mod uniforms;
 mod update;

@@ -6,18 +6,12 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK_DIR="$SCRIPT_DIR/hooks/codex"
-CODEX_DIR="$HOME/.codex"
+CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
 
 mkdir -p "$CODEX_DIR"
 
 # --- 1. Merge hooks into hooks.json ---
 HOOKS_JSON="$CODEX_DIR/hooks.json"
-
-# Our hook entries as JSON fragments
-WEZMUX_SESSION_START='{"hooks":[{"type":"command","command":"'"$HOOK_DIR"'/update-title.sh --hook --once","timeout":5}]}'
-WEZMUX_PROMPT_SUBMIT='{"hooks":[{"type":"command","command":"'"$HOOK_DIR"'/on-prompt-submit.sh","timeout":5},{"type":"command","command":"'"$HOOK_DIR"'/update-title.sh --hook","timeout":70,"async":true}]}'
-WEZMUX_STOP='{"hooks":[{"type":"command","command":"'"$HOOK_DIR"'/on-stop.sh","timeout":5}]}'
-WEZMUX_PRE_TOOL='{"hooks":[{"type":"command","command":"'"$HOOK_DIR"'/on-pre-tool-use.sh","timeout":5}]}'
 
 is_wezmux_hook() {
     echo "$1" | jq -e '.. | .command? // empty | test("wezmux|on-prompt-submit\\.sh|on-stop\\.sh|on-pre-tool-use\\.sh|update-title\\.sh")' >/dev/null 2>&1
@@ -25,9 +19,17 @@ is_wezmux_hook() {
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "ERROR: jq is required to safely merge Codex hooks."
-    echo "Install with: brew install jq"
+    echo "Install with: sudo apt-get install jq (Ubuntu), or brew install jq (macOS)"
     exit 1
 fi
+
+# Shell-quote the directory, then let jq escape JSON. Custom PREFIX paths
+# may contain spaces, quotes or backslashes.
+quoted_hook_dir="'${HOOK_DIR//\'/\'\\\'\'}'"
+WEZMUX_SESSION_START=$(jq -n --arg dir "$quoted_hook_dir" '{hooks:[{type:"command",command:($dir+"/update-title.sh --hook --once"),timeout:5}]}')
+WEZMUX_PROMPT_SUBMIT=$(jq -n --arg dir "$quoted_hook_dir" '{hooks:[{type:"command",command:($dir+"/on-prompt-submit.sh"),timeout:5},{type:"command",command:($dir+"/update-title.sh --hook"),timeout:70,async:true}]}')
+WEZMUX_STOP=$(jq -n --arg dir "$quoted_hook_dir" '{hooks:[{type:"command",command:($dir+"/on-stop.sh"),timeout:5}]}')
+WEZMUX_PRE_TOOL=$(jq -n --arg dir "$quoted_hook_dir" '{hooks:[{type:"command",command:($dir+"/on-pre-tool-use.sh"),timeout:5}]}')
 
 if [ -f "$HOOKS_JSON" ] && [ -s "$HOOKS_JSON" ]; then
     # Existing hooks.json — merge our hooks in, replacing any previous wezmux entries
@@ -75,17 +77,32 @@ fi
 # Codex renamed [features].codex_hooks → [features].hooks. Migrate old key if present.
 CONFIG_TOML="$CODEX_DIR/config.toml"
 
+# -i with a backup suffix is supported by both GNU and BSD sed.
+# A unique scratch copy also avoids leaving backup files next to user config.
+edit_config() {
+    local scratch
+    scratch=$(mktemp "$CODEX_DIR/.wezmux-config.XXXXXX")
+    cp "$CONFIG_TOML" "$scratch"
+    if sed -i.bak "$@" "$scratch"; then
+        cat "$scratch" > "$CONFIG_TOML"
+        rm -f "$scratch" "$scratch.bak"
+    else
+        rm -f "$scratch" "$scratch.bak"
+        return 1
+    fi
+}
+
 if [ -f "$CONFIG_TOML" ]; then
     if grep -q 'codex_hooks' "$CONFIG_TOML"; then
-        sed -i '' -E 's/codex_hooks[[:space:]]*=[[:space:]]*(true|false)/hooks = true/' "$CONFIG_TOML"
+        edit_config -E 's/codex_hooks[[:space:]]*=[[:space:]]*(true|false)/hooks = true/'
         echo "Migrated codex_hooks → hooks in $CONFIG_TOML"
     elif grep -qE '^[[:space:]]*hooks[[:space:]]*=' "$CONFIG_TOML"; then
-        sed -i '' -E 's/^([[:space:]]*)hooks[[:space:]]*=[[:space:]]*false/\1hooks = true/' "$CONFIG_TOML"
+        edit_config -E 's/^([[:space:]]*)hooks[[:space:]]*=[[:space:]]*false/\1hooks = true/'
         echo "Enabled hooks in $CONFIG_TOML"
     elif grep -q '\[features\]' "$CONFIG_TOML"; then
-        sed -i '' '/\[features\]/a\
+        edit_config '/\[features\]/a\
 hooks = true
-' "$CONFIG_TOML"
+'
         echo "Added hooks = true to [features] in $CONFIG_TOML"
     else
         echo "" >> "$CONFIG_TOML"

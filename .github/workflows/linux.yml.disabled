@@ -1,0 +1,38 @@
+# name: linux
+#
+# on:
+#   pull_request:
+#     branches: [main]
+#   push:
+#     branches: [main]
+#   workflow_dispatch:
+#
+# permissions:
+#   contents: read
+#
+# jobs:
+#   ubuntu:
+#     runs-on: ubuntu-24.04
+#     steps:
+#       - uses: actions/checkout@v4
+#         with:
+#           submodules: recursive
+#       - uses: dtolnay/rust-toolchain@stable
+#       - uses: Swatinem/rust-cache@v2
+#       - name: Install build and integration dependencies
+#         run: |
+#           sudo apt-get update
+#           env CI=yes ./get-deps
+#           sudo apt-get install -y jq lsof desktop-file-utils
+#       - name: Build Linux binaries
+#         run: cargo build --locked -p wezterm -p wezterm-gui -p wezterm-mux-server -p strip-ansi-escapes
+#       - name: Test core and GUI modules
+#         run: cargo test --locked -p mux -p wezterm-gui -p wezterm-escape-parser
+#       - name: Check Linux installer and hooks
+#         run: python3 ci/test-linux-install.py
+#       - name: Assemble Linux bundle
+#         run: bash bin/install-linux.sh "$PWD/target/wezmux-linux" target/debug
+#       - uses: actions/upload-artifact@v4
+#         with:
+#           name: Wezmux-linux-x64-debug
+#           path: target/wezmux-linux

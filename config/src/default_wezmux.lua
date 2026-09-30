@@ -1,13 +1,13 @@
 local wezterm = require 'wezterm'
 local config = wezterm.config_builder()
 local target_triple = wezterm.target_triple or ''
-local is_windows = target_triple:find('windows') ~= nil
+local is_macos = target_triple:find('darwin') ~= nil
 
-if is_windows then
-  config.font = wezterm.font('JetBrains Mono')
-else
+if is_macos then
   config.font = wezterm.font('Menlo')
   config.macos_window_background_blur = 20
+else
+  config.font = wezterm.font('JetBrains Mono')
 end
 config.font_size = 14
 
@@ -37,14 +37,14 @@ config.inactive_pane_hsb = {
 }
 
 local act = wezterm.action
-local primary_mod = is_windows and 'CTRL|SHIFT' or 'SUPER'
-local secondary_mod = is_windows and 'CTRL|ALT' or 'SUPER|SHIFT'
+local primary_mod = is_macos and 'SUPER' or 'CTRL|SHIFT'
+local secondary_mod = is_macos and 'SUPER|SHIFT' or 'CTRL|ALT'
 -- Workspace switching uses Opt+Shift on macOS so we don't collide with
 -- system screenshot shortcuts (Cmd+Shift+3/4/5) which are intercepted by
 -- macOS before any app sees them. phys:N (below) targets the hardware key
 -- regardless of layout, so we leave macOS Option-key composition at its
 -- default (enabled) and keep Opt+N → ~, Opt+E → ´, etc. working on AZERTY.
-local workspace_mod = is_windows and 'CTRL|ALT' or 'OPT|SHIFT'
+local workspace_mod = is_macos and 'OPT|SHIFT' or 'CTRL|ALT'
 
 config.keys = {
   -- Pane splitting
@@ -94,7 +94,7 @@ config.keys = {
 -- TUI apps like vim/tmux/lazygit. Modifier-clicks bypass mouse reporting,
 -- so this works everywhere — matching the macOS convention used by Terminal,
 -- iTerm2, and VS Code.
-local link_mod = is_windows and 'CTRL' or 'SUPER'
+local link_mod = is_macos and 'SUPER' or 'CTRL'
 config.mouse_bindings = {
   {
     event = { Up = { streak = 1, button = 'Left' } },
